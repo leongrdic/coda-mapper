@@ -1,44 +1,65 @@
-export class CodaTable {
-  private _isDirty: boolean;
-  private _original;
+export abstract class CodaTable {
+  abstract id: string;
+  private _original = {};
+  private _isDirty: boolean = false;
   constructor() {
-    this._isDirty = false;
-    this._original = { id: undefined };
-
     return new Proxy(this, {
-      set(target, prop, value) {
-        if (prop === "isDirty") {
-          console.warn(`Cannot modify read-only property: ${prop}`);
-          return false; // Prevent assignment
+      set: (target, prop, value) => {
+        if (!Object.hasOwn(this._original, prop)) {
+          this._isDirty = true;
+        } else if (
+          target[prop as keyof typeof target] !==
+          this._original[prop as keyof typeof this._original]
+        ) {
+          this._isDirty = true;
         }
-
-        if (prop !== "_original") {
-          target._isDirty = value !== target._original[prop];
-        }
-
-        target[prop] = value;
+        target[prop as keyof typeof target] = value;
         return true;
-      },
-      get(target, prop) {
-        if (prop === "isDirty") {
-          return target._isDirty; // Expose but prevent modification
-        }
-        return target[prop];
       },
     });
   }
 
-  getDirtyFields() {
-    return Object.keys(this._original).reduce((dirty, key) => {
-      if (this[key] !== this._original[key]) {
-        dirty[key] = this[key];
-      }
-      return dirty;
-    }, {});
+  public isDirty() {
+    return this._isDirty;
   }
 
-  resetDirty() {
-    this._isDirty = false;
-    this._original = { ...this };
+  public getValues(): {
+    [K in keyof this as this[K] extends Function
+      ? never
+      : K extends `_${string}`
+      ? never
+      : K]: this[K];
+  } {
+    const values = {} as typeof this;
+    for (const key of Object.keys(this)) {
+      if (
+        !key.startsWith("_") &&
+        typeof this[key as keyof this] !== "function"
+      ) {
+        values[key as keyof this] = this[key as keyof this];
+      }
+    }
+    return values as this;
+  }
+
+  public getDirtyValues(): {
+    [K in keyof this as this[K] extends Function
+      ? never
+      : K extends `_${string}`
+      ? never
+      : K]?: this[K];
+  } {
+    const values = this.getValues();
+    const dirtyValues = {} as typeof this;
+    for (const key of Object.keys(values)) {
+      if (
+        !Object.hasOwn(this._original, key) ||
+        values[key as keyof typeof values] !==
+          this._original[key as keyof typeof this._original]
+      ) {
+        dirtyValues[key as keyof this] = this[key as keyof this];
+      }
+    }
+    return dirtyValues;
   }
 }

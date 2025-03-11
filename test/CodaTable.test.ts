@@ -1,20 +1,23 @@
-import { CodaTable, ColumnId, TableId } from '../src';
-import { getMeta } from '../src/utils';
+import { CodaRelation, CodaTable, ColumnId, References, TableId } from '../src';
+import { getColumnId, getTableId } from '../src/utils';
+
+class RelatedTable extends CodaTable {
+    id: string;
+    string: string;
+}
 
 @TableId('test_table_id')
 class TestTable extends CodaTable {
-    @ColumnId('id_column_id') readonly id: string;
+    id: string; // id doesn't use @ColumnId
     @ColumnId('string_column_id') string: string;
     @ColumnId('number_column_id') number: number;
     @ColumnId('boolean_column_id') boolean: boolean;
-    @ColumnId('related_table_column_id') relatedTable: RelatedTable;
+    @ColumnId('related_table_column_id')
+    @References(() => RelatedTable)
+    relatedTable: CodaRelation<RelatedTable>;
     @ColumnId('related_table_array_column_id')
-    relatedTableArray: RelatedTable[];
-}
-
-class RelatedTable extends CodaTable {
-    readonly id: string;
-    string: string;
+    @References(() => RelatedTable)
+    relatedTableArray: CodaRelation<RelatedTable[]>;
 }
 
 let table: TestTable;
@@ -43,32 +46,23 @@ describe('CodaTable module', () => {
     });
 
     it('should have correct metadata set', () => {
-        expect(getMeta(table, 'tableId')).toBe('test_table_id');
-        expect(getMeta(TestTable, 'tableId')).toBe('test_table_id');
+        expect(getTableId(table)).toBe('test_table_id');
+        expect(getTableId(TestTable)).toBe('test_table_id');
 
-        expect(getMeta(table, 'id')).toBe('id_column_id');
-        expect(getMeta(TestTable, 'id')).toBe('id_column_id');
+        expect(getColumnId(table, 'string')).toBe('string_column_id');
+        expect(getColumnId(TestTable, 'string')).toBe('string_column_id');
 
-        expect(getMeta(table, 'string')).toBe('string_column_id');
-        expect(getMeta(TestTable, 'string')).toBe('string_column_id');
+        expect(getColumnId(table, 'number')).toBe('number_column_id');
+        expect(getColumnId(TestTable, 'number')).toBe('number_column_id');
 
-        expect(getMeta(table, 'number')).toBe('number_column_id');
-        expect(getMeta(TestTable, 'number')).toBe('number_column_id');
+        expect(getColumnId(table, 'boolean')).toBe('boolean_column_id');
+        expect(getColumnId(TestTable, 'boolean')).toBe('boolean_column_id');
 
-        expect(getMeta(table, 'boolean')).toBe('boolean_column_id');
-        expect(getMeta(TestTable, 'boolean')).toBe('boolean_column_id');
+        expect(getColumnId(table, 'relatedTable')).toBe('related_table_column_id');
+        expect(getColumnId(TestTable, 'relatedTable')).toBe('related_table_column_id');
 
-        expect(getMeta(table, 'relatedTable')).toBe('related_table_column_id');
-        expect(getMeta(TestTable, 'relatedTable')).toBe(
-            'related_table_column_id'
-        );
-
-        expect(getMeta(table, 'relatedTableArray')).toBe(
-            'related_table_array_column_id'
-        );
-        expect(getMeta(TestTable, 'relatedTableArray')).toBe(
-            'related_table_array_column_id'
-        );
+        expect(getColumnId(table, 'relatedTableArray')).toBe('related_table_array_column_id');
+        expect(getColumnId(TestTable, 'relatedTableArray')).toBe('related_table_array_column_id');
     });
 
     it('should have correct values set', () => {
@@ -79,6 +73,52 @@ describe('CodaTable module', () => {
             boolean: true,
             relatedTable: relatedTable,
             relatedTableArray: [relatedTable],
+        });
+
+        expect(table.id).toBe(undefined);
+        expect(table.string).toBe('test');
+        expect(table.number).toBe(1);
+        expect(table.boolean).toBe(true);
+        expect(table.relatedTable).toBe(relatedTable);
+        expect(table.relatedTableArray).toStrictEqual([relatedTable]);
+    });
+
+    it('should allow unassigning values when type is not enforced', () => {
+        class UnassignableTable extends CodaTable {
+            id: string;
+            string: string | undefined;
+            number: number | undefined;
+            boolean: boolean | undefined;
+            relatedTable: RelatedTable | undefined;
+            relatedTableArray: RelatedTable[]; // for obvious reasons, this one shouldn't be able to be undefined
+        }
+        const unassignableTable = new UnassignableTable();
+        unassignableTable.string = 'test';
+        unassignableTable.number = 1;
+        unassignableTable.boolean = true;
+        unassignableTable.relatedTable = relatedTable;
+        unassignableTable.relatedTableArray = [relatedTable];
+        expect(unassignableTable.getValues()).toStrictEqual({
+            id: undefined,
+            string: 'test',
+            number: 1,
+            boolean: true,
+            relatedTable: relatedTable,
+            relatedTableArray: [relatedTable],
+        });
+
+        unassignableTable.string = undefined;
+        unassignableTable.number = undefined;
+        unassignableTable.boolean = undefined;
+        unassignableTable.relatedTable = undefined;
+        unassignableTable.relatedTableArray = [];
+        expect(unassignableTable.getValues()).toStrictEqual({
+            id: undefined,
+            string: undefined,
+            number: undefined,
+            boolean: undefined,
+            relatedTable: undefined,
+            relatedTableArray: [],
         });
     });
 
@@ -95,7 +135,7 @@ describe('CodaTable module', () => {
         });
 
         // Resetting the dirty state should return false
-        table.resetDirty();
+        table._resetDirty();
         expect(table.isDirty()).toBe(false);
         expect(table.getValues()).toStrictEqual({
             id: undefined,
@@ -134,6 +174,19 @@ describe('CodaTable module', () => {
         expect(table.getDirtyValues()).toStrictEqual({
             number: 3,
         });
+
+        // Changing a value back to the original should not make the table dirty
+        table.number = 1;
+        expect(table.isDirty()).toBe(false);
+        expect(table.getValues()).toStrictEqual({
+            id: undefined,
+            string: 'test',
+            number: 1,
+            boolean: true,
+            relatedTable: relatedTable,
+            relatedTableArray: [relatedTable],
+        });
+        expect(table.getDirtyValues()).toStrictEqual({});
     });
 
     it('should correctly evaluate dirty parameter for all cases', () => {
@@ -143,17 +196,14 @@ describe('CodaTable module', () => {
             ['number', 1, 2],
             ['boolean', true, false],
             ['relatedTable', relatedTable, otherRelatedTable],
-            [
-                'relatedTableArray',
-                [relatedTable],
-                [relatedTable, otherRelatedTable],
-            ],
+            ['relatedTableArray', [relatedTable], [relatedTable, otherRelatedTable]],
         ] as const;
         for (const [accessor, originalValue, newValue] of tableProperties) {
             const tableValues = table.getValues();
-            table.resetDirty();
+            table._resetDirty();
             (table[accessor] as any) = newValue;
             expect(table.isDirty()).toBe(true);
+            expect(table[accessor]).toStrictEqual(newValue);
             expect(table.getDirtyValues()).toStrictEqual({
                 [accessor]: newValue,
             });
@@ -163,10 +213,13 @@ describe('CodaTable module', () => {
             });
             (table[accessor] as any) = originalValue;
             expect(table.isDirty()).toBe(false);
+            expect(table[accessor]).toStrictEqual(originalValue);
+            expect(table.getDirtyValues()).toStrictEqual({});
+            expect(table.getValues()).toStrictEqual(tableValues);
         }
     });
 
-    it('should be passed by reference', () => {
+    it('should be passed by reference', async () => {
         const table2 = table;
         table2.string = 'test2';
         expect(table.string).toBe('test2');
@@ -177,9 +230,58 @@ describe('CodaTable module', () => {
         changeTable(table2);
         expect(table.string).toBe('test3');
 
-        const propertyTable = table.relatedTable;
+        const propertyTable = await table.relatedTable;
         propertyTable.string = 'related2';
         expect(propertyTable.string).toBe('related2');
         expect(relatedTable.string).toBe('related2');
+        const replaceTable = <T extends CodaTable>(row: T) => {
+            const newRow = new TestTable();
+            newRow.number = 5;
+            Object.assign(row, newRow);
+            return row;
+        };
+        replaceTable(table);
+        expect(table.number).toBe(5);
+        expect(table.getValues()).toStrictEqual({
+            id: undefined,
+            string: undefined,
+            number: 5,
+            boolean: undefined,
+            relatedTable: undefined,
+            relatedTableArray: undefined,
+        });
+        table.number = 1;
+        table = replaceTable(table);
+        expect(table.number).toBe(5);
+        expect(table.getValues()).toStrictEqual({
+            id: undefined,
+            string: undefined,
+            number: 5,
+            boolean: undefined,
+            relatedTable: undefined,
+            relatedTableArray: undefined,
+        });
+    });
+
+    it('should be mad if you pass wrong relations', () => {
+        class OtherRelatedTable extends CodaTable {
+            id: string;
+            number: number;
+        }
+        const otherRelatedTable = new OtherRelatedTable();
+        expect(() => {
+            /* @ts-expect-error this is the wrong table being inserted */
+            table.relatedTable = otherRelatedTable;
+        }).toThrow('Expected RelatedTable but got OtherRelatedTable');
+    });
+
+    it('should throw appropriate refresh errors', () => {
+        expect(() => table.refresh()).rejects.toThrow(
+            'Unable to refresh row "undefined". This row hasn\'t been inserted to or fetched from Coda.'
+        );
+        table.id = 'some_id';
+        expect(() => table.refresh()).rejects.toThrow(
+            'Unable to refresh row "some_id". This row hasn\'t been inserted to or fetched from Coda.'
+        );
     });
 });

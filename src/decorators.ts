@@ -9,13 +9,20 @@ export const TableId =
         });
     };
 
-const setMeta =
-    <V>(value: V): PropertyDecorator =>
+export const ColumnId =
+    (value: string): PropertyDecorator =>
     (target, propertyKey) => {
         Reflect.set(target.constructor, Symbol.metadata, {
             ...Reflect.get(target.constructor, Symbol.metadata),
-            [propertyKey]: value,
+            [`col_${String(propertyKey)}`]: value, // todo col_
         });
     };
-export const ColumnId = (value: string) => setMeta(value);
-export const RelatedTable = (value: CodaTable) => setMeta(value);
+
+export const References =
+    <V extends CodaTable>(value: () => new () => V): PropertyDecorator =>
+    async (target, propertyKey) => {
+        Reflect.set(target.constructor, Symbol.metadata, {
+            ...Reflect.get(target.constructor, Symbol.metadata),
+            [`rel_${String(propertyKey)}`]: value,
+        });
+    };

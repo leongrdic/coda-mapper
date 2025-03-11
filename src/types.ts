@@ -1,3 +1,5 @@
+import { CodaTable } from './CodaTable';
+
 declare global {
     interface SymbolConstructor {
         readonly metadata: unique symbol;
@@ -5,6 +7,8 @@ declare global {
 }
 
 export type RecursiveHelper<T> = T | Array<T | RecursiveHelper<T>>;
+export type CodaRelation<T extends CodaTable | CodaTable[]> =
+    T extends Array<infer U> ? U[] : T | Promise<T extends Array<infer U> ? U[] : T>;
 
 export type CodaGetRowsQuery = {
     query?: `"${string}":${string}`;
@@ -92,6 +96,7 @@ export type CodaRow = {
 export type CodaRowValue =
     | string
     | number
+    | boolean
     | `\`\`\`${string}\`\`\``
     | {
           '@context': 'http://schema.org';

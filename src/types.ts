@@ -1,4 +1,4 @@
-import { CodaTable } from './CodaTable';
+import type { CodaTable } from './CodaTable';
 
 declare global {
     interface SymbolConstructor {

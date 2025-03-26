@@ -1,5 +1,15 @@
 import { CodaTable } from './CodaTable';
 import {
+    delay,
+    enforce,
+    getColumnId,
+    getMultiple,
+    getRelation,
+    getTableId,
+    parseJson,
+} from './utils';
+
+import type {
     CodaDeleteResponse,
     CodaDeleteRowsRequest,
     CodaGetRowQuery,
@@ -10,21 +20,12 @@ import {
     CodaPutRowRequest,
     CodaRow,
     CodaRowResponse,
-    CodaRowsResponse,
     CodaRowValue,
+    CodaRowsResponse,
     CodaUpdateResponse,
     CodaUpsertResponse,
     RecursiveHelper,
 } from './types';
-import {
-    delay,
-    enforce,
-    getColumnId,
-    getMultiple,
-    getRelation,
-    getTableId,
-    parseJson,
-} from './utils';
 
 export class CodaMapper {
     private readonly baseUrl = 'https://coda.io/apis/v1';
@@ -213,7 +214,7 @@ export class CodaMapper {
 
     private async getMutationStatus(requestId: string) {
         const url = `${this.baseUrl}/mutationStatus/${requestId}`;
-        return this.api.get<CodaMutationStatusResponse, {}>(url);
+        return this.api.get<CodaMutationStatusResponse, object>(url);
     }
     public async waitForMutation<
         PR extends Promise<
@@ -232,7 +233,7 @@ export class CodaMapper {
     public async refresh<R extends CodaTable>(row: R) {
         const id = enforce(
             row.id,
-            `Unable to refresh row "${row.id}". This row hasn\'t been inserted to or fetched from Coda.`
+            `Unable to refresh row "${row.id}". This row hasn't been inserted to or fetched from Coda.`
         );
         const newRow = enforce(
             await this.get(row.constructor as new () => R, id),

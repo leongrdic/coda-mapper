@@ -1,5 +1,7 @@
-import { CodaRelation, CodaTable, ColumnId, References, TableId } from '../src';
+import { CodaTable, ColumnId, References, TableId } from '../src';
 import { getColumnId, getTableId } from '../src/utils';
+
+import type { CodaRelation } from '../src';
 
 class RelatedTable extends CodaTable {
     id: string;

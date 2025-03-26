@@ -1,4 +1,4 @@
-import { CodaTable } from './CodaTable';
+import type { CodaTable } from './CodaTable';
 
 export const TableId =
     (tableId: string): ClassDecorator =>

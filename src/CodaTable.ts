@@ -1,5 +1,6 @@
-import { CodaMapper } from './CodaMapper';
 import { enforce, getRelation } from './utils';
+
+import type { CodaMapper } from './CodaMapper';
 
 export abstract class CodaTable {
     abstract id: string;

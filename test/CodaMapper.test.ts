@@ -1,5 +1,6 @@
 import { CodaMapper, CodaTable, ColumnId, References, TableId } from '../src';
-import {
+
+import type {
     CodaDeleteRowsRequest,
     CodaInsertResponse,
     CodaPostRowsRequest,
@@ -270,7 +271,7 @@ describe('CodaMapper module', () => {
         expect(global.fetch).toHaveBeenCalledTimes(2);
         expect(table1).toBeInstanceOf(Table1);
         // without awaiting, this should now be a resolved table1 instance
-        let otherTable1 = table3.table1;
+        const otherTable1 = table3.table1;
         expect(global.fetch).toHaveBeenCalledTimes(2);
         expect(otherTable1).toBeInstanceOf(Table1);
         expect(otherTable1).toBe(table1);

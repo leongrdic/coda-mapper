@@ -263,7 +263,7 @@ describe('CodaTable module', () => {
         });
     });
 
-    it('should be mad if you pass wrong relations', () => {
+    it('should throw if you pass wrong relations', () => {
         class OtherRelatedTable extends CodaTable {
             id: string;
             number: number;

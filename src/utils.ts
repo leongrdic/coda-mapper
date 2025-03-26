@@ -1,5 +1,7 @@
 import { CodaTable } from './CodaTable';
 
+export const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 export const parseJson = async <T>(fetchPromise: Promise<Response>): Promise<T> => {
     const response = await fetchPromise;
     if (!response.ok) {
@@ -25,6 +27,8 @@ export const getColumnId = (target: CodaTable | (new () => CodaTable), key: stri
     getMeta(target, `col_${key}`);
 export const getRelation = (target: CodaTable | (new () => CodaTable), key: string) =>
     getMeta<() => new () => CodaTable>(target, `rel_${key}`)?.();
+export const getMultiple = (target: CodaTable | (new () => CodaTable), key: string) =>
+    getMeta<true | undefined>(target, `mul_${key}`) ?? false;
 
 export const enforce = <V>(
     value: V,

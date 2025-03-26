@@ -14,15 +14,21 @@ export const ColumnId =
     (target, propertyKey) => {
         Reflect.set(target.constructor, Symbol.metadata, {
             ...Reflect.get(target.constructor, Symbol.metadata),
-            [`col_${String(propertyKey)}`]: value, // todo col_
+            [`col_${String(propertyKey)}`]: value,
         });
     };
 
 export const References =
     <V extends CodaTable>(value: () => new () => V): PropertyDecorator =>
-    async (target, propertyKey) => {
+    (target, propertyKey) => {
         Reflect.set(target.constructor, Symbol.metadata, {
             ...Reflect.get(target.constructor, Symbol.metadata),
             [`rel_${String(propertyKey)}`]: value,
         });
     };
+export const Multiple: PropertyDecorator = (target, propertyKey) => {
+    Reflect.set(target.constructor, Symbol.metadata, {
+        ...Reflect.get(target.constructor, Symbol.metadata),
+        [`mul_${String(propertyKey)}`]: true,
+    });
+};

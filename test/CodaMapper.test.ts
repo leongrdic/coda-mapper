@@ -1,13 +1,31 @@
 import { CodaMapper, CodaTable, ColumnId, References, TableId } from '../src';
-import { CodaRelation, CodaRowResponse } from '../src/types';
+import {
+    CodaDeleteRowsRequest,
+    CodaInsertResponse,
+    CodaPostRowsRequest,
+    CodaPutRowRequest,
+    CodaRelation,
+    CodaRowResponse,
+    CodaRowsResponse,
+} from '../src/types';
 
 const mapper = new CodaMapper('doc_id', 'api_key');
 
-const mockFetchResponse = (response: any) => {
-    global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(response),
-    });
+const mockFetchResponse = (...responses: Array<any>) => {
+    let fn = jest.fn();
+    for (const [index, response] of responses.entries()) {
+        fn = fn[index === responses.length - 1 ? 'mockResolvedValue' : 'mockResolvedValueOnce']({
+            ok: true,
+            json: () => Promise.resolve(response),
+        });
+    }
+    global.fetch = fn;
+};
+
+const mockFetchOptions = (options: RequestInit = {}) => {
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer api_key`);
+    return { ...options, headers };
 };
 
 describe('CodaMapper module', () => {
@@ -33,7 +51,7 @@ describe('CodaMapper module', () => {
             id: string;
         }
         expect(mapper.get(TestTable, 'some_column_id')).rejects.toThrow(
-            'TableId not set for class TestTable'
+            '@TableId not set for class TestTable'
         );
     });
     it('should correctly fetch and parse a CodaTable, as well as cache the reference.', async () => {
@@ -245,14 +263,254 @@ describe('CodaMapper module', () => {
         } satisfies Partial<CodaRowResponse>);
 
         let table1 = table2.table1;
+        expect(global.fetch).toHaveBeenCalledTimes(1);
         expect(table1).toBeInstanceOf(Promise);
         expect(table1).resolves.toBeInstanceOf(Table1);
         table1 = await table2.table1;
+        expect(global.fetch).toHaveBeenCalledTimes(2);
         expect(table1).toBeInstanceOf(Table1);
         // without awaiting, this should now be a resolved table1 instance
         let otherTable1 = table3.table1;
+        expect(global.fetch).toHaveBeenCalledTimes(2);
         expect(otherTable1).toBeInstanceOf(Table1);
         expect(otherTable1).toBe(table1);
-        console.log(mapper);
+    });
+
+    it('should correctly insert a new row', async () => {
+        @TableId('table_id')
+        class TestTable extends CodaTable {
+            id: string;
+            @ColumnId('column_name') name: string;
+        }
+
+        const newTable = new TestTable();
+        newTable.name = 'name_value';
+
+        mockFetchResponse({
+            addedRowIds: ['id_value'],
+            requestId: 'request_id',
+        } satisfies CodaInsertResponse);
+
+        await mapper.insert(newTable);
+
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            1,
+            'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows',
+            mockFetchOptions({
+                method: 'POST',
+                body: JSON.stringify({
+                    rows: [
+                        {
+                            cells: [{ column: 'column_name', value: 'name_value' }],
+                        },
+                    ],
+                } satisfies CodaPostRowsRequest),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+        );
+
+        expect(newTable.id).toBe('id_value');
+        expect(newTable._getState()).toStrictEqual({
+            existsOnCoda: true,
+            isFetched: false,
+        });
+        expect(newTable.getValues()).toStrictEqual({
+            id: 'id_value',
+            name: 'name_value',
+        });
+        expect(newTable.getDirtyValues()).toStrictEqual({});
+    });
+
+    it('should correctly update a row', async () => {
+        @TableId('table_id')
+        class TestTable extends CodaTable {
+            id: string;
+            @ColumnId('column_name') name: string;
+        }
+
+        mockFetchResponse({
+            id: 'id_value',
+            values: {
+                column_name: 'name_value',
+            },
+        } satisfies Partial<CodaRowResponse>);
+
+        const table = await mapper.get(TestTable, 'id_value');
+        if (!table) {
+            throw new Error('Table is undefined');
+        }
+
+        table.name = 'new_name_value';
+
+        expect(table.isDirty()).toBe(true);
+        expect(table.getValues()).toStrictEqual({
+            id: 'id_value',
+            name: 'new_name_value',
+        });
+        expect(table.getDirtyValues()).toStrictEqual({
+            name: 'new_name_value',
+        });
+
+        await table.update();
+
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows/id_value',
+            mockFetchOptions({
+                method: 'PUT',
+                body: JSON.stringify({
+                    row: {
+                        cells: [{ column: 'column_name', value: 'new_name_value' }],
+                    },
+                } satisfies CodaPutRowRequest),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+        );
+
+        expect(table.isDirty()).toBe(false);
+        expect(table.getValues()).toStrictEqual({
+            id: 'id_value',
+            name: 'new_name_value',
+        });
+        expect(table.getDirtyValues()).toStrictEqual({});
+    });
+
+    it('should correctly batchUpdate rows', async () => {
+        @TableId('table_id')
+        class TestTable extends CodaTable {
+            @ColumnId('column_id') id: string;
+            @ColumnId('column_name') name: string;
+        }
+
+        mockFetchResponse({
+            items: [
+                {
+                    id: 'id_value',
+                    values: {
+                        column_name: 'name_value',
+                    },
+                    browserLink: 'browser_link',
+                    createdAt: 'created_at',
+                    href: 'href',
+                    index: 0,
+                    name: 'name',
+                    type: 'row',
+                    updatedAt: 'updated_at',
+                },
+                {
+                    id: 'id_value2',
+                    values: {
+                        column_name: 'name_value2',
+                    },
+                    browserLink: 'browser_link',
+                    createdAt: 'created_at',
+                    href: 'href',
+                    index: 0,
+                    name: 'name',
+                    type: 'row',
+                    updatedAt: 'updated_at',
+                },
+            ],
+        } satisfies Partial<CodaRowsResponse>);
+
+        const tables = await mapper.all(TestTable);
+        expect(tables).toHaveLength(2);
+        for (const [index, table] of tables.entries()) {
+            expect(table).toBeInstanceOf(TestTable);
+            table.name = `new_name_value${index}`;
+            expect(table.isDirty()).toBe(true);
+        }
+
+        await mapper.updateBatch(tables, ['id']);
+
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows',
+            mockFetchOptions({
+                method: 'POST',
+                body: JSON.stringify({
+                    rows: [
+                        {
+                            cells: [
+                                {
+                                    column: 'column_id',
+                                    value: 'id_value',
+                                },
+                                {
+                                    column: 'column_name',
+                                    value: 'new_name_value0',
+                                },
+                            ],
+                        },
+                        {
+                            cells: [
+                                {
+                                    column: 'column_id',
+                                    value: 'id_value2',
+                                },
+                                {
+                                    column: 'column_name',
+                                    value: 'new_name_value1',
+                                },
+                            ],
+                        },
+                    ],
+                    keyColumns: ['column_id'],
+                } satisfies CodaPostRowsRequest),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+        );
+
+        for (const [index, table] of tables.entries()) {
+            expect(table.isDirty()).toBe(false);
+            expect(table.getValues()).toStrictEqual({
+                id: table.id,
+                name: `new_name_value${index}`,
+            });
+            expect(table.getDirtyValues()).toStrictEqual({});
+        }
+    });
+
+    it('should correctly delete a row', async () => {
+        @TableId('table_id')
+        class TestTable extends CodaTable {
+            id: string;
+            @ColumnId('column_name') name: string;
+        }
+
+        mockFetchResponse({
+            id: 'id_value',
+            values: {
+                column_name: 'name_value',
+            },
+        } satisfies Partial<CodaRowResponse>);
+
+        const table = await mapper.get(TestTable, 'id_value');
+        if (!table) {
+            throw new Error('Table is undefined');
+        }
+
+        await table.delete();
+
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows',
+            mockFetchOptions({
+                method: 'DELETE',
+                body: JSON.stringify({
+                    rowIds: ['id_value'],
+                } satisfies CodaDeleteRowsRequest),
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+        );
     });
 });

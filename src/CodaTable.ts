@@ -7,10 +7,10 @@ export abstract class CodaTable {
     private _isDirty: boolean = false;
     constructor(
         private _mapper?: CodaMapper,
-        private _state?: {
+        private _state: {
             existsOnCoda?: boolean;
             isFetched?: boolean;
-        }
+        } = {}
     ) {
         enforce(
             new.target !== CodaTable,
@@ -115,8 +115,34 @@ export abstract class CodaTable {
     public async refresh() {
         return enforce(
             this.id && this._mapper,
-            `Unable to refresh row "${this.id}". This row hasn\'t been inserted to or fetched from Coda.`
+            `Unable to refresh row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
         ).refresh(this);
+    }
+
+    public async update() {
+        return enforce(
+            this.id && this._mapper,
+            `Unable to update row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
+        ).update(this);
+    }
+    public async updateAndWait() {
+        return enforce(
+            this.id && this._mapper,
+            `Unable to update row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
+        ).waitForMutation(this.update());
+    }
+
+    public async delete() {
+        return enforce(
+            this.id && this._mapper,
+            `Unable to delete row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
+        ).delete(this);
+    }
+    public async deleteAndWait() {
+        return enforce(
+            this.id && this._mapper,
+            `Unable to update row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
+        ).waitForMutation(this.delete());
     }
 
     public isDirty() {

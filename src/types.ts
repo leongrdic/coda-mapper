@@ -27,7 +27,7 @@ export type CodaPostRowsRequest = {
     rows: {
         cells: {
             column: string;
-            value: string | number | boolean;
+            value: RecursiveHelper<string | number | boolean>;
         }[];
     }[];
     keyColumns?: string[];
@@ -47,7 +47,7 @@ export type CodaPutRowRequest = {
     row: {
         cells: {
             column: string;
-            value: string | number | boolean;
+            value: RecursiveHelper<string | number | boolean>;
         }[];
     };
 };
@@ -70,6 +70,25 @@ export type CodaRowResponse = CodaRow & {
             name: string;
         };
     };
+};
+export type CodaInsertResponse = {
+    requestId: string;
+    addedRowIds: string[];
+};
+export type CodaUpsertResponse = {
+    requestId: string;
+};
+export type CodaUpdateResponse = {
+    requestId: string;
+    id: string;
+};
+export type CodaDeleteResponse = {
+    requestId: string;
+    rowIds: string[];
+};
+export type CodaMutationStatusResponse = {
+    completed: boolean;
+    warning?: string;
 };
 export type CodaRowsResponse = {
     items: CodaRow[];

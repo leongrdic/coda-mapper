@@ -11,6 +11,16 @@ export class FetchError extends Error {
 
 export const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+export const parseURL = (url: string, params: Record<string, string | number> = {}): string => {
+    const newUrl = new URL(url);
+    const searchParams = new URLSearchParams(newUrl.search);
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined) searchParams.set(key, String(value));
+    }
+    newUrl.search = searchParams.toString();
+    return newUrl.toString();
+};
+
 export const parseJson = async <T>(fetchPromise: Promise<Response>): Promise<T> => {
     const response = await fetchPromise;
     if (!response.ok) {

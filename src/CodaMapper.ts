@@ -8,6 +8,7 @@ import {
     getRelation,
     getTableId,
     parseJson,
+    parseURL,
 } from './utils';
 
 import type {
@@ -55,10 +56,10 @@ export class CodaMapper {
     private readonly api = {
         get: <R, Q>(url: string, params?: Q, options?: RequestInit) =>
             this.fetch<R>(
-                `${url}?${new URLSearchParams({
+                parseURL(url, {
                     ...params,
                     valueFormat: 'rich',
-                }).toString()}`,
+                }),
                 {
                     method: 'GET',
                     ...options,
@@ -272,17 +273,32 @@ export class CodaMapper {
             `@ColumnId not set for property ${String(property)} in class ${table.name}`
         );
         const url = `${this.baseUrl}/docs/${this.docId}/tables/${tableId}/rows`;
-        const response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(url, {
-            query: `"${columnId}":${JSON.stringify(value)}`,
-        });
-        return response.items.map((row) => this.parseDtoRow(table, row));
+        let response;
+        const items: R[] = [];
+        do {
+            response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(url, {
+                query: `"${columnId}":${JSON.stringify(value)}`,
+                pageToken:
+                    response && 'nextPageToken' in response ? response.nextPageToken : undefined,
+            });
+            items.push(...response.items.map((row) => this.parseDtoRow(table, row)));
+        } while (response && 'nextPageToken' in response && response.nextPageToken);
+        return items;
     }
 
     public async all<R extends CodaTable>(table: new () => R): Promise<R[]> {
         const tableId = enforce(getTableId(table), `@TableId not set for class ${table.name}`);
         const url = `${this.baseUrl}/docs/${this.docId}/tables/${tableId}/rows`;
-        const response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(url);
-        return response.items.map((row) => this.parseDtoRow(table, row));
+        let response;
+        const items: R[] = [];
+        do {
+            response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(url, {
+                pageToken:
+                    response && 'nextPageToken' in response ? response.nextPageToken : undefined,
+            });
+            items.push(...response.items.map((row) => this.parseDtoRow(table, row)));
+        } while (response && 'nextPageToken' in response && response.nextPageToken);
+        return items;
     }
 
     public async insert<R extends CodaTable>(rows: R | R[]): Promise<CodaInsertResponse> {

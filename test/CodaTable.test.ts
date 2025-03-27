@@ -236,33 +236,6 @@ describe('CodaTable module', () => {
         propertyTable.string = 'related2';
         expect(propertyTable.string).toBe('related2');
         expect(relatedTable.string).toBe('related2');
-        const replaceTable = <T extends CodaTable>(row: T) => {
-            const newRow = new TestTable();
-            newRow.number = 5;
-            Object.assign(row, newRow);
-            return row;
-        };
-        replaceTable(table);
-        expect(table.number).toBe(5);
-        expect(table.getValues()).toStrictEqual({
-            id: undefined,
-            string: undefined,
-            number: 5,
-            boolean: undefined,
-            relatedTable: undefined,
-            relatedTableArray: undefined,
-        });
-        table.number = 1;
-        table = replaceTable(table);
-        expect(table.number).toBe(5);
-        expect(table.getValues()).toStrictEqual({
-            id: undefined,
-            string: undefined,
-            number: 5,
-            boolean: undefined,
-            relatedTable: undefined,
-            relatedTableArray: undefined,
-        });
     });
 
     it('should throw if you pass wrong relations', () => {

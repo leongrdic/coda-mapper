@@ -1,18 +1,18 @@
 import { enforce, getRelation } from './utils';
 
 import type { CodaMapper } from './CodaMapper';
+import type { CodaRelation } from './types';
 
 export abstract class CodaTable {
     abstract id: string;
     public _original = {};
     private _isDirty: boolean = false;
-    constructor(
-        private _mapper?: CodaMapper,
-        private _state: {
-            existsOnCoda?: boolean;
-            isFetched?: boolean;
-        } = {}
-    ) {
+    private _mapper: CodaMapper;
+    private _state = {
+        existsOnCoda: false,
+        isFetched: false,
+    };
+    constructor() {
         enforce(
             new.target !== CodaTable,
             'You cannot instantiate CodaTable directly. Please extend it.'
@@ -112,10 +112,22 @@ export abstract class CodaTable {
             isFetched: this._state?.isFetched ?? false,
         };
     }
+    public _assign(
+        mapper: CodaMapper,
+        state: { existsOnCoda?: boolean; isFetched?: boolean },
+        values: Partial<this> = {}
+    ) {
+        this._mapper = mapper;
+        this._state = { ...this._state, ...state };
+        for (const key of Object.keys(values)) {
+            this[key as keyof this] = values[key as keyof this] as this[keyof this];
+        }
+        this._resetDirty();
+    }
 
     public async refresh() {
         return enforce(
-            this.id && this._mapper,
+            this._mapper,
             `Unable to refresh row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
         ).refresh(this);
     }
@@ -150,20 +162,20 @@ export abstract class CodaTable {
         return this._isDirty;
     }
 
-    public getValues(): {
-        [K in keyof this as this[K] extends Function
-            ? never
-            : K extends `_${string}`
-              ? never
-              : K]: this[K];
-    } {
+    public getValues() {
         const values = {} as typeof this;
         for (const key of Object.keys(this)) {
             if (!key.startsWith('_')) {
                 values[key as keyof this] = this[`_direct_${key}` as keyof this];
             }
         }
-        return values as this;
+        return values as {
+            [K in keyof this as this[K] extends Function
+                ? never
+                : K extends `_${string}`
+                  ? never
+                  : K]: this[K] extends CodaRelation<infer U> ? U : this[K];
+        };
     }
 
     public _resetDirty() {
@@ -171,13 +183,7 @@ export abstract class CodaTable {
         this._isDirty = false;
     }
 
-    public getDirtyValues(): {
-        [K in keyof this as this[K] extends Function
-            ? never
-            : K extends `_${string}`
-              ? never
-              : K]?: this[K];
-    } {
+    public getDirtyValues() {
         const values = this.getValues();
         const dirtyValues = {} as typeof this;
         for (const key of Object.keys(values)) {
@@ -204,6 +210,12 @@ export abstract class CodaTable {
                 dirtyValues[key as keyof this] = this[`_direct_${key}` as keyof this];
             }
         }
-        return dirtyValues;
+        return dirtyValues as {
+            [K in keyof this as this[K] extends Function
+                ? never
+                : K extends `_${string}`
+                  ? never
+                  : K]?: this[K] extends CodaRelation<infer U> ? U : this[K];
+        };
     }
 }

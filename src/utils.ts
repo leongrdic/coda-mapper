@@ -1,16 +1,25 @@
 import { CodaTable } from './CodaTable';
 
+export class FetchError extends Error {
+    constructor(
+        message: string,
+        public response: Response
+    ) {
+        super(message);
+    }
+}
+
 export const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 export const parseJson = async <T>(fetchPromise: Promise<Response>): Promise<T> => {
     const response = await fetchPromise;
     if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.statusText}`);
+        throw new FetchError(`Failed to fetch: ${response.statusText}`, response);
     }
     try {
-        return response.json() as Promise<T>;
+        return response.json();
     } catch (e) {
-        throw new Error(`Failed to parse JSON: ${e}`);
+        throw new FetchError(`Failed to parse JSON: ${e}`, response);
     }
 };
 

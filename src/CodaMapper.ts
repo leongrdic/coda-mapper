@@ -1,5 +1,6 @@
 import { CodaTable } from './CodaTable';
 import {
+    FetchError,
     delay,
     enforce,
     getColumnId,
@@ -96,7 +97,8 @@ export class CodaMapper {
         table: new (...args: ConstructorParameters<typeof CodaTable>) => R,
         dtoRow: CodaRow
     ) {
-        const row = new table(this, { existsOnCoda: true, isFetched: true });
+        const parsedValues = {} as R;
+        const row = new table();
         for (const prop of Object.keys(row.getValues())) {
             if (prop === 'id') continue;
             const columnId = enforce(
@@ -114,15 +116,15 @@ export class CodaMapper {
                       table.name,
                       prop
                   );
-            row[prop as keyof R] = parsedValue as R[keyof R];
+            parsedValues[prop as keyof R] = parsedValue as R[keyof R];
         }
-        row.id = dtoRow.id;
-        row._resetDirty();
+        parsedValues.id = dtoRow.id;
         const cachedRow = this.cache.get(`${getTableId(table)}:${dtoRow.id}`);
         if (cachedRow) {
-            Object.assign(cachedRow, row);
+            cachedRow._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues);
             return cachedRow as R;
         }
+        row._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues);
         this.cache.set(`${getTableId(table)}:${dtoRow.id}`, row);
         return row;
     }
@@ -150,8 +152,8 @@ export class CodaMapper {
                 const table = new (enforce(
                     relation,
                     `@RelatedTable not set for row "${keyName}" on table ${className}.`
-                ))(this, { existsOnCoda: true });
-                table.id = value.rowId;
+                ))();
+                table._assign(this, { existsOnCoda: true }, { id: value.rowId });
                 this.cache.set(`${value.tableId}:${value.rowId}`, table);
                 return table;
             } else if (value['@type'] === 'MonetaryAmount') return value.amount;
@@ -232,22 +234,26 @@ export class CodaMapper {
 
     public async refresh<R extends CodaTable>(row: R) {
         const id = enforce(
-            row.id,
+            row._getState().existsOnCoda && row.id,
             `Unable to refresh row "${row.id}". This row hasn't been inserted to or fetched from Coda.`
         );
-        const newRow = enforce(
+        enforce(
             await this.get(row.constructor as new () => R, id),
-            `Refreshing row "${row.id}" on table ${row.constructor.name} returned null`
+            `Refreshing row "${row.id}" on table ${row.constructor.name} does not exist anymore.`
         );
-        Object.assign(row, newRow);
         return row;
     }
 
     public async get<T extends CodaTable>(table: new () => T, id: string): Promise<T | null> {
         const tableId = enforce(getTableId(table), `@TableId not set for class ${table.name}`);
         const url = `${this.baseUrl}/docs/${this.docId}/tables/${tableId}/rows/${id}`;
-        const response = await this.api.get<CodaRowResponse, CodaGetRowQuery>(url);
-        return this.parseDtoRow(table, response);
+        try {
+            const response = await this.api.get<CodaRowResponse, CodaGetRowQuery>(url);
+            return this.parseDtoRow(table, response);
+        } catch (e) {
+            if (e instanceof FetchError && e.response.status === 404) return null;
+            throw e;
+        }
     }
 
     public async find<R extends CodaTable>(
@@ -297,13 +303,10 @@ export class CodaMapper {
             rows: rows.map((r) => this.parseCodaRow(r)),
         });
         for (const [index, row] of rows.entries()) {
-            const newRow = new (row.constructor as new (
-                ...args: ConstructorParameters<typeof CodaTable>
-            ) => R)(this, { existsOnCoda: true });
-            Object.assign(newRow, row.getValues());
-            newRow.id = response.addedRowIds[index];
-            newRow._resetDirty();
-            Object.assign(row, newRow);
+            row._assign(this, { existsOnCoda: true }, {
+                id: response.addedRowIds[index],
+            } as typeof row);
+            row._resetDirty();
         }
         return response;
     }

@@ -1,4 +1,5 @@
-import { CodaMapper, CodaTable, ColumnId, References, TableId } from '../src';
+import { CodaMapper, CodaTable, ColumnId, Multiple, References, TableId } from '../src';
+import { delay } from '../src/utils';
 
 import type {
     CodaDeleteRowsRequest,
@@ -17,7 +18,10 @@ const mockFetchResponse = (...responses: Array<any>) => {
     for (const [index, response] of responses.entries()) {
         fn = fn[index === responses.length - 1 ? 'mockResolvedValue' : 'mockResolvedValueOnce']({
             ok: true,
-            json: () => Promise.resolve(response),
+            json: async () => {
+                await delay(30);
+                return response;
+            },
         });
     }
     global.fetch = fn;
@@ -194,6 +198,87 @@ describe('CodaMapper module', () => {
         // once fetched, direct access should be a Table2 instance and not a promise
         table2 = table1.table2;
         expect(table2).toBeInstanceOf(Table2);
+    });
+
+    it('should fetch relation when relation is awaited', async () => {
+        @TableId('table1_id')
+        class Table1 extends CodaTable {
+            id: string;
+            @ColumnId('table1_number') number: number;
+            @ColumnId('table1_relations') @References(() => Table2) @Multiple table2s: CodaRelation<
+                Table2[]
+            >;
+        }
+        @TableId('table2_id')
+        class Table2 extends CodaTable {
+            id: string;
+            @ColumnId('table2_text') text: string;
+            @ColumnId('table2_relations') @References(() => Table1) @Multiple table1s: CodaRelation<
+                Table1[]
+            >;
+        }
+
+        mockFetchResponse({
+            id: 'table1_id_value',
+            values: {
+                table1_number: 12,
+                table1_relations: [
+                    {
+                        '@context': 'http://schema.org',
+                        '@type': 'StructuredValue',
+                        additionalType: 'row',
+                        name: 'name',
+                        rowId: 'table2_id_value',
+                        tableId: 'table2_id',
+                        tableUrl: 'url',
+                        url: 'url',
+                    },
+                ],
+            },
+        } satisfies Partial<CodaRowResponse>);
+        const table1 = await mapper.get(Table1, 'table1_id_value');
+        if (!table1) {
+            throw new Error('Table1 is undefined');
+        }
+
+        // when values are received, the relation should be an unfetched Table2 instance
+        for (const t of table1.getValues().table2s) {
+            expect(t).toBeInstanceOf(Table2);
+        }
+
+        mockFetchResponse({
+            id: 'table2_id_value',
+            values: {
+                table2_text: 'asd',
+                table2_relations: [
+                    {
+                        '@context': 'http://schema.org',
+                        '@type': 'StructuredValue',
+                        additionalType: 'row',
+                        name: 'name',
+                        rowId: 'table1_id_value3',
+                        tableId: 'table1_id',
+                        tableUrl: 'url',
+                        url: 'url',
+                    },
+                    {
+                        '@context': 'http://schema.org',
+                        '@type': 'StructuredValue',
+                        additionalType: 'row',
+                        name: 'name',
+                        rowId: 'table1_id_value4',
+                        tableId: 'table1_id',
+                        tableUrl: 'url',
+                        url: 'url',
+                    },
+                ],
+            },
+        } satisfies Partial<CodaRowResponse>);
+
+        // when accessing an array, make sure it's a promise that resolves into an array of Table2 instances
+        const table2s = await table1.table2s;
+        expect(table2s).toBeInstanceOf(Array);
+        expect(table2s[0]).toBeInstanceOf(Table2);
     });
 
     it("should fetch other table's relation when relation is awaited", async () => {

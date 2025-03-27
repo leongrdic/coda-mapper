@@ -3,6 +3,23 @@ import { enforce, getRelation } from './utils';
 import type { CodaMapper } from './CodaMapper';
 import type { CodaRelation } from './types';
 
+/**
+ * Abstract base class representing a table in Coda.
+ *
+ * This class provides core functionality for tracking state, enforcing types,
+ * and proxying property accesses with a sprinkle of magic.
+ *
+ * @abstract
+ * @example
+ * ⁣@TableId('table-id')
+ * class MyTable extends CodaTable {
+ *   id: string;
+ *   ⁣@ColumnId('column-id') name: string;
+ *   ⁣@ColumnId('column-id') ⁣@Multiple age: number[];
+ *   ⁣@ColumnId('column-id') ⁣@References(() => OtherTable) relation: CodaRelation<OtherTable>;
+ *   ⁣@ColumnId('column-id') ⁣@References(() => OtherTable) ⁣@Multiple relations: CodaRelation<OtherTable[]>;
+ * }
+ */
 export abstract class CodaTable {
     abstract id: string;
     public _original = {};
@@ -39,7 +56,7 @@ export abstract class CodaTable {
                     );
                     const itemState = item._getState();
                     if (itemState.existsOnCoda && !itemState.isFetched) {
-                        return item.refresh();
+                        return item.pull();
                     }
                     return item;
                 }
@@ -51,7 +68,7 @@ export abstract class CodaTable {
                     );
                     const itemState = item._getState();
                     if (itemState.existsOnCoda && !itemState.isFetched) {
-                        relationArray.push(item.refresh());
+                        relationArray.push(item.pull());
                     } else {
                         relationArray.push(item);
                     }
@@ -106,12 +123,26 @@ export abstract class CodaTable {
         });
     }
 
+    /**
+     * Internal function. Retrieves the current state of the table.
+     *
+     * @example
+     * const state = myTable._getState();
+     * console.log(state.existsOnCoda, state.isFetched);
+     */
     public _getState() {
         return {
             existsOnCoda: this._state?.existsOnCoda ?? false,
             isFetched: this._state?.isFetched ?? false,
         };
     }
+
+    /**
+     * Internal function. Assigns mapper, state, and initial values to the table.
+     *
+     * @example
+     * myTable._assign(mapper, { existsOnCoda: true }, { id: 'row_123', name: 'John' });
+     */
     public _assign(
         mapper: CodaMapper,
         state: { existsOnCoda?: boolean; isFetched?: boolean },
@@ -125,32 +156,82 @@ export abstract class CodaTable {
         this._resetDirty();
     }
 
-    public async refresh() {
+    /**
+     * Pulls (refreshes) the row from Coda.
+     *
+     * If the row hasn't been inserted to or fetched from Coda, it will throw an error (or at least politely complain).
+     *
+     * @throws Will throw if the row hasn't been inserted to or fetched from Coda.
+     * @example
+     * await myTable.pull();
+     * console.log('Row refreshed:', myTable);
+     */
+    public async pull() {
         return enforce(
             this._mapper,
             `Unable to refresh row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
         ).refresh(this);
     }
 
-    public async update() {
+    /**
+     * Pushes (updates) the row in Coda. It only sends dirty values.
+     *
+     * A way to say, "Hey Coda, here's my latest and greatest version!".
+     *
+     * @throws Will throw if the row hasn't been inserted to or fetched from Coda.
+     * @example
+     * await myTable.push();
+     * console.log('Row updated!');
+     */
+    public async push() {
         return enforce(
             this.id && this._mapper,
             `Unable to update row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
         ).update(this);
     }
-    public async updateAndWait() {
+    /**
+     * Pushes the row and waits for the mutation to be confirmed.
+     *
+     * Because sometimes, patience is a virtue — even when updating data.
+     *
+     * @throws Will throw if the row hasn't been inserted to or fetched from Coda.
+     * @example
+     * await myTable.pushAndWait();
+     * console.log('Row update confirmed!');
+     */
+    public async pushAndWait() {
         return enforce(
             this.id && this._mapper,
             `Unable to update row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
-        ).waitForMutation(this.update());
+        ).waitForMutation(this.push());
     }
 
+    /**
+     * Deletes the row from Coda.
+     *
+     * Removes the row. Even data sometimes needs to go on a vacation (permanently).
+     *
+     * @throws Will throw if the row hasn't been inserted to or fetched from Coda.
+     * @example
+     * await myTable.delete();
+     * console.log('Row deleted.');
+     */
     public async delete() {
         return enforce(
             this.id && this._mapper,
             `Unable to delete row "${this.id}". This row hasn't been inserted to or fetched from Coda.`
         ).delete(this);
     }
+    /**
+     * Deletes the row and waits for the deletion mutation to be confirmed.
+     *
+     * A little extra patience for your data deletion needs.
+     *
+     * @throws Will throw if the row hasn't been inserted to or fetched from Coda.
+     * @example
+     * await myTable.deleteAndWait();
+     * console.log('Row deletion confirmed.');
+     */
     public async deleteAndWait() {
         return enforce(
             this.id && this._mapper,
@@ -158,10 +239,25 @@ export abstract class CodaTable {
         ).waitForMutation(this.delete());
     }
 
+    /**
+     * Returns true if any of the rows have been changed.
+     *
+     * @example
+     * if (myTable.isDirty()) {
+     *   console.log('You have changed some data!');
+     * }
+     */
     public isDirty() {
         return this._isDirty;
     }
 
+    /**
+     * Retrieves a copy of the current values of the row.
+     *
+     * @example
+     * const values = myTable.getValues();
+     * console.log(values); // { id: 'row_123', name: 'John' }
+     */
     public getValues() {
         const values = {} as typeof this;
         for (const key of Object.keys(this)) {
@@ -178,11 +274,27 @@ export abstract class CodaTable {
         };
     }
 
+    /**
+     * Internal function. Resets the dirty tracking state.
+     * All of the changed values will be considered as original values.
+     *
+     * @example
+     * myTable._resetDirty();
+     * console.log(myTable.isDirty()); // false
+     */
     public _resetDirty() {
         this._original = { ...this.getValues() };
         this._isDirty = false;
     }
 
+    /**
+     * Retrieves a copy of the values that have been modified.
+     *
+     * @example
+     * myTable.name = 'New name';
+     * const dirtyValues = myTable.getDirtyValues();
+     * console.log(dirtyValues); // { name: 'New name' }
+     */
     public getDirtyValues() {
         const values = this.getValues();
         const dirtyValues = {} as typeof this;

@@ -251,11 +251,11 @@ describe('CodaTable module', () => {
     });
 
     it('should throw appropriate refresh errors', () => {
-        expect(() => table.refresh()).rejects.toThrow(
+        expect(() => table.pull()).rejects.toThrow(
             'Unable to refresh row "undefined". This row hasn\'t been inserted to or fetched from Coda.'
         );
         table.id = 'some_id';
-        expect(() => table.refresh()).rejects.toThrow(
+        expect(() => table.pull()).rejects.toThrow(
             'Unable to refresh row "some_id". This row hasn\'t been inserted to or fetched from Coda.'
         );
     });

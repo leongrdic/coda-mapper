@@ -124,7 +124,7 @@ describe('CodaMapper module', () => {
                 column_name: 'new_new_name_value',
             },
         } satisfies Partial<CodaRowResponse>);
-        const table2 = await table.refresh();
+        const table2 = await table.pull();
         expect(table.name).toBe('new_new_name_value');
         expect(table2).toBe(table);
     });
@@ -440,7 +440,7 @@ describe('CodaMapper module', () => {
             name: 'new_name_value',
         });
 
-        await table.update();
+        await table.push();
 
         expect(global.fetch).toHaveBeenNthCalledWith(
             2,

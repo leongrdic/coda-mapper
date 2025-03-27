@@ -8,7 +8,7 @@ declare global {
 
 export type RecursiveHelper<T> = T | Array<T | RecursiveHelper<T>>;
 export type CodaRelation<T extends CodaTable | CodaTable[]> =
-    T extends Array<infer U> ? U[] : T | Promise<T extends Array<infer U> ? U[] : T>;
+    T extends Array<infer U> ? U[] | Promise<U[]> : T | Promise<T>;
 
 export type CodaGetRowsQuery = {
     query?: `"${string}":${string}`;

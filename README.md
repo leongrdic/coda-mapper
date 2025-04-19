@@ -70,7 +70,6 @@ Come take a look at what's under the hood.
 The `CodaTable` class is an abstract base class that represents a row in a Coda table. Think of it as your model, handling state management, change detection, and lazy fetching of related data with a hint of wizardry. Key methods include:
 
 - **`pull()`**: Refreshes the row from Coda.
-
 - **`push()`**: Updates the row in Coda.
 - **`pushAndWait()`**: Updates the row in Coda and waits for the mutation to complete.
 - **`delete()`**: Deletes the row from Coda.

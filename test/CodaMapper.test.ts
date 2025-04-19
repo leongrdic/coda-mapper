@@ -13,7 +13,7 @@ import type {
 
 const mapper = new CodaMapper('doc_id', 'api_key');
 
-const mockFetchResponse = (...responses: Array<any>) => {
+const mockFetchResponse = <T>(...responses: Array<T>) => {
     let fn = jest.fn();
     for (const [index, response] of responses.entries()) {
         fn = fn[index === responses.length - 1 ? 'mockResolvedValue' : 'mockResolvedValueOnce']({

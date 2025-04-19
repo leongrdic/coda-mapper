@@ -203,7 +203,7 @@ describe('CodaTable module', () => {
         for (const [accessor, originalValue, newValue] of tableProperties) {
             const tableValues = table.getValues();
             table._resetDirty();
-            (table[accessor] as any) = newValue;
+            (table[accessor] as typeof newValue) = newValue;
             expect(table.isDirty()).toBe(true);
             expect(table[accessor]).toStrictEqual(newValue);
             expect(table.getDirtyValues()).toStrictEqual({
@@ -213,7 +213,7 @@ describe('CodaTable module', () => {
                 ...tableValues,
                 [accessor]: newValue,
             });
-            (table[accessor] as any) = originalValue;
+            (table[accessor] as typeof originalValue) = originalValue;
             expect(table.isDirty()).toBe(false);
             expect(table[accessor]).toStrictEqual(originalValue);
             expect(table.getDirtyValues()).toStrictEqual({});

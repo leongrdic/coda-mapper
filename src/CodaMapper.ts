@@ -90,7 +90,7 @@ export class CodaMapper {
                 url,
                 method: options.method,
                 headers: Object.fromEntries(headers.entries()),
-                body: String(options.body) ? JSON.parse(String(options.body)) : undefined,
+                body: options.body ? JSON.parse(String(options.body)) : undefined,
             });
         }
         const response = await fetch(url, { ...options, headers });

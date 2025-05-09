@@ -1,6 +1,6 @@
 import { CodaTable } from './CodaTable';
 import {
-    FetchError,
+    CodaError,
     delay,
     enforce,
     getColumnId,
@@ -40,13 +40,26 @@ import type {
  * // etc...
  */
 export class CodaMapper {
-    private readonly baseUrl = 'https://coda.io/apis/v1';
+    private readonly baseUrl: string = 'https://coda.io/apis/v1';
+    private readonly debugHttpRequests: boolean = false;
+
     constructor(
         private readonly docId: string,
-        private readonly apiKey: string
+        private readonly apiKey: string,
+        options?: {
+            baseUrl?: string;
+            debugHttpRequests?: boolean;
+        }
     ) {
         enforce(docId, 'docId is required');
         enforce(apiKey, 'apiKey is required');
+        if (options?.baseUrl) this.baseUrl = options.baseUrl;
+        if (options?.debugHttpRequests) {
+            console.debug(
+                '[CodaMapper] Debugging HTTP requests is enabled. This will log all requests and responses to the console. To disable it, set "debugHttpRequests" to false.'
+            );
+            this.debugHttpRequests = options.debugHttpRequests;
+        }
     }
 
     private cache: Map<`${string}:${string}`, CodaTable> = new Map();
@@ -66,10 +79,37 @@ export class CodaMapper {
         this.cache.clear();
     }
 
-    private fetch<R>(url: string, options: RequestInit = {}) {
-        const headers = new Headers(options.headers);
-        headers.set('Authorization', `Bearer ${this.apiKey}`);
-        return parseJson<R>(fetch(url, { ...options, headers }));
+    private async fetch<R>(url: string, options: RequestInit = {}) {
+        const headers = new Headers({
+            ...options.headers,
+            Authorization: `Bearer ${this.apiKey}`,
+        });
+        if (this.debugHttpRequests) {
+            console.debug({
+                message: `[CodaMapper] ${options.method} Request to ${url}`,
+                url,
+                method: options.method,
+                headers: Object.fromEntries(headers.entries()),
+                body: String(options.body) ? JSON.parse(String(options.body)) : undefined,
+            });
+        }
+        const response = await fetch(url, { ...options, headers });
+        if (this.debugHttpRequests) {
+            const responseClone = response.clone();
+            let body;
+            try {
+                body = await responseClone.json();
+            } catch {
+                body = await responseClone.text();
+            }
+            console[response.ok ? 'debug' : 'error']({
+                message: `[CodaMapper] Response from ${url}`,
+                url: responseClone.url,
+                status: responseClone.status,
+                body,
+            });
+        }
+        return parseJson<R>(response);
     }
 
     private readonly api = {
@@ -77,6 +117,7 @@ export class CodaMapper {
             this.fetch<R>(
                 parseURL(url, {
                     ...params,
+                    useColumnNames: false,
                     valueFormat: 'rich',
                 }),
                 {
@@ -270,19 +311,27 @@ export class CodaMapper {
      *
      * You can also use `row.pull()` instead of this method. It uses this method internally.
      *
+     * Be careful when using the `latest` option. If the API's view of the doc is not up to date, the API will return an HTTP 400 response.
+     *
      * @example
      * const row = await mapper.get(MyTable, 'row-id');
      * // some time later
      * await mapper.refresh(row);
      * console.log(row); // latest data
      */
-    public async refresh<R extends CodaTable>(row: R) {
+    public async refresh<R extends CodaTable>(
+        row: R,
+        options?: {
+            latest?: boolean;
+            params?: CodaGetRowQuery;
+        }
+    ) {
         const id = enforce(
             row._getState().existsOnCoda && row.id,
             `Unable to refresh row "${row.id}". This row hasn't been inserted to or fetched from Coda.`
         );
         enforce(
-            await this.get(row.constructor as new () => R, id),
+            await this.get(row.constructor as new () => R, id, options),
             `Refreshing row "${row.id}" on table ${row.constructor.name} does not exist anymore.`
         );
         return row;
@@ -291,24 +340,38 @@ export class CodaMapper {
     /**
      * Fetches a row from Coda. If the row doesn't exist, it returns `null`.
      *
+     * Careful when using the `latest` option. If the API's view of the doc is not up to date, the API will return an HTTP 400 response.
+     *
      * @example
      * const row = await mapper.get(MyTable, 'row-id');
      * console.log(row); // row or null
      */
-    public async get<T extends CodaTable>(table: new () => T, id: string): Promise<T | null> {
+    public async get<T extends CodaTable>(
+        table: new () => T,
+        id: string,
+        options?: {
+            latest?: boolean;
+        }
+    ): Promise<T | null> {
         const tableId = enforce(getTableId(table), `@TableId not set for class ${table.name}`);
         const url = `${this.baseUrl}/docs/${this.docId}/tables/${tableId}/rows/${id}`;
         try {
-            const response = await this.api.get<CodaRowResponse, CodaGetRowQuery>(url);
+            const response = await this.api.get<CodaRowResponse, CodaGetRowQuery>(
+                url,
+                undefined,
+                options?.latest ? { headers: { 'X-Coda-Doc-Version': 'latest' } } : undefined
+            );
             return this.parseDtoRow(table, response);
         } catch (e) {
-            if (e instanceof FetchError && e.response.status === 404) return null;
+            if (e instanceof CodaError && e.response.status === 404) return null;
             throw e;
         }
     }
 
     /**
      * Fetches all rows from a table that match a search criteria.
+     *
+     * Be careful when using the `latest` option. If the API's view of the doc is not up to date, the API will return an HTTP 400 response.
      *
      * @example
      * const rows = await mapper.find(MyTable, 'name', 'John');
@@ -322,7 +385,11 @@ export class CodaMapper {
             }[keyof R],
             `_${string}` | 'id'
         >,
-        value: string
+        value: string,
+        options?: {
+            latest?: boolean;
+            params?: Pick<CodaGetRowsQuery, 'sortBy' | 'syncToken' | 'visibleOnly'>;
+        }
     ): Promise<R[]> {
         const tableId = enforce(getTableId(table), `@TableId not set for class ${table.name}`);
         const columnId = enforce(
@@ -333,11 +400,19 @@ export class CodaMapper {
         let response;
         const items: R[] = [];
         do {
-            response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(url, {
-                query: `"${columnId}":${JSON.stringify(value)}`,
-                pageToken:
-                    response && 'nextPageToken' in response ? response.nextPageToken : undefined,
-            });
+            response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(
+                url,
+                {
+                    ...options?.params,
+                    query: `"${columnId}":${JSON.stringify(value)}`,
+                    pageToken:
+                        response && 'nextPageToken' in response
+                            ? response.nextPageToken
+                            : undefined,
+                    limit: 500, // max limit
+                },
+                options?.latest ? { headers: { 'X-Coda-Doc-Version': 'latest' } } : undefined
+            );
             items.push(...response.items.map((row) => this.parseDtoRow(table, row)));
         } while (response && 'nextPageToken' in response && response.nextPageToken);
         return items;
@@ -346,20 +421,36 @@ export class CodaMapper {
     /**
      * Fetches all rows from a table.
      *
+     * Be careful when using the `latest` option. If the API's view of the doc is not up to date, the API will return an HTTP 400 response.
+     *
      * @example
      * const rows = await mapper.all(MyTable);
      * console.log(rows); // all rows from the table MyTable
      */
-    public async all<R extends CodaTable>(table: new () => R): Promise<R[]> {
+    public async all<R extends CodaTable>(
+        table: new () => R,
+        options?: {
+            latest?: boolean;
+            params?: Pick<CodaGetRowsQuery, 'sortBy' | 'syncToken' | 'visibleOnly'>;
+        }
+    ): Promise<R[]> {
         const tableId = enforce(getTableId(table), `@TableId not set for class ${table.name}`);
         const url = `${this.baseUrl}/docs/${this.docId}/tables/${tableId}/rows`;
         let response;
         const items: R[] = [];
         do {
-            response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(url, {
-                pageToken:
-                    response && 'nextPageToken' in response ? response.nextPageToken : undefined,
-            });
+            response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(
+                url,
+                {
+                    ...options?.params,
+                    pageToken:
+                        response && 'nextPageToken' in response
+                            ? response.nextPageToken
+                            : undefined,
+                    limit: 500, // max limit
+                },
+                options?.latest ? { headers: { 'X-Coda-Doc-Version': 'latest' } } : undefined
+            );
             items.push(...response.items.map((row) => this.parseDtoRow(table, row)));
         } while (response && 'nextPageToken' in response && response.nextPageToken);
         return items;

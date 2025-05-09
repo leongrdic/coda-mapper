@@ -1,3 +1,4 @@
+export { CodaError } from './utils';
 export { CodaTable } from './CodaTable';
 export { CodaMapper } from './CodaMapper';
 export { ColumnId, Multiple, References, TableId } from './decorators';

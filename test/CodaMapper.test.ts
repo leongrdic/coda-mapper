@@ -1,5 +1,5 @@
 import { CodaMapper, CodaTable, ColumnId, Multiple, References, TableId } from '../src';
-import { delay } from '../src/utils';
+import { delay, parseURL } from '../src/utils';
 
 import type {
     CodaDeleteRowsRequest,
@@ -25,12 +25,6 @@ const mockFetchResponse = <T>(...responses: Array<T>) => {
         });
     }
     global.fetch = fn;
-};
-
-const mockFetchOptions = (options: RequestInit = {}) => {
-    const headers = new Headers(options.headers);
-    headers.set('Authorization', `Bearer api_key`);
-    return { ...options, headers };
 };
 
 describe('CodaMapper module', () => {
@@ -91,6 +85,109 @@ describe('CodaMapper module', () => {
         table.name = 'new_name';
         expect(table.name).toBe('new_name');
         expect(table2.name).toBe('new_name');
+    });
+    it('should fetch the row with the correct options', async () => {
+        @TableId('table_id')
+        class TestTable extends CodaTable {
+            id: string;
+            @ColumnId('column_name') name: string;
+        }
+        mockFetchResponse(
+            {
+                id: 'id_value',
+                values: {
+                    column_name: 'name_value',
+                },
+            } satisfies Partial<CodaRowResponse>,
+            {
+                items: [
+                    {
+                        id: 'id_value',
+                        values: {
+                            column_name: 'name_value',
+                        },
+                        browserLink: 'browser_link',
+                        createdAt: 'created_at',
+                        href: 'href',
+                        index: 0,
+                        name: 'name',
+                        type: 'row',
+                        updatedAt: 'updated_at',
+                    },
+                ],
+            } satisfies Partial<CodaRowsResponse>
+        );
+        await mapper.get(TestTable, 'id_value', {
+            latest: true,
+        });
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            1,
+            parseURL('https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows/id_value', {
+                useColumnNames: false,
+                valueFormat: 'rich',
+            }),
+            {
+                method: 'GET',
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
+                    'X-Coda-Doc-Version': 'latest',
+                }),
+            }
+        );
+        const paramsFind = {
+            sortBy: 'createdAt',
+            syncToken: '123',
+            visibleOnly: true,
+        } as const;
+        await mapper.find(TestTable, 'name', 'name_value', {
+            params: paramsFind,
+            latest: true,
+        });
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            parseURL('https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows', {
+                ...paramsFind,
+                query: `"column_name":${JSON.stringify('name_value')}`,
+                limit: 500,
+                useColumnNames: false,
+                valueFormat: 'rich',
+            }),
+            {
+                method: 'GET',
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
+                    'X-Coda-Doc-Version': 'latest',
+                }),
+            }
+        );
+        const paramsAll = {
+            sortBy: 'createdAt',
+            syncToken: '123',
+            visibleOnly: true,
+        } as const;
+        await mapper.all(TestTable, {
+            params: paramsAll,
+            latest: true,
+        });
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            3,
+            parseURL('https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows', {
+                ...paramsAll,
+                limit: 500,
+                useColumnNames: false,
+                valueFormat: 'rich',
+            }),
+            {
+                method: 'GET',
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
+                    'X-Coda-Doc-Version': 'latest',
+                }),
+            }
+        );
     });
 
     it('should refresh the row with the latest data from Coda', async () => {
@@ -383,7 +480,7 @@ describe('CodaMapper module', () => {
         expect(global.fetch).toHaveBeenNthCalledWith(
             1,
             'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows',
-            mockFetchOptions({
+            {
                 method: 'POST',
                 body: JSON.stringify({
                     rows: [
@@ -392,10 +489,11 @@ describe('CodaMapper module', () => {
                         },
                     ],
                 } satisfies CodaPostRowsRequest),
-                headers: {
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
                     'Content-Type': 'application/json',
-                },
-            })
+                }),
+            }
         );
 
         expect(newTable.id).toBe('id_value');
@@ -445,17 +543,18 @@ describe('CodaMapper module', () => {
         expect(global.fetch).toHaveBeenNthCalledWith(
             2,
             'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows/id_value',
-            mockFetchOptions({
+            {
                 method: 'PUT',
                 body: JSON.stringify({
                     row: {
                         cells: [{ column: 'column_name', value: 'new_name_value' }],
                     },
                 } satisfies CodaPutRowRequest),
-                headers: {
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
                     'Content-Type': 'application/json',
-                },
-            })
+                }),
+            }
         );
 
         expect(table.isDirty()).toBe(false);
@@ -517,7 +616,7 @@ describe('CodaMapper module', () => {
         expect(global.fetch).toHaveBeenNthCalledWith(
             2,
             'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows',
-            mockFetchOptions({
+            {
                 method: 'POST',
                 body: JSON.stringify({
                     rows: [
@@ -548,10 +647,11 @@ describe('CodaMapper module', () => {
                     ],
                     keyColumns: ['column_id'],
                 } satisfies CodaPostRowsRequest),
-                headers: {
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
                     'Content-Type': 'application/json',
-                },
-            })
+                }),
+            }
         );
 
         for (const [index, table] of tables.entries()) {
@@ -588,15 +688,16 @@ describe('CodaMapper module', () => {
         expect(global.fetch).toHaveBeenNthCalledWith(
             2,
             'https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows',
-            mockFetchOptions({
+            {
                 method: 'DELETE',
                 body: JSON.stringify({
                     rowIds: ['id_value'],
                 } satisfies CodaDeleteRowsRequest),
-                headers: {
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
                     'Content-Type': 'application/json',
-                },
-            })
+                }),
+            }
         );
     });
 });

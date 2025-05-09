@@ -1,6 +1,6 @@
 import { CodaTable } from './CodaTable';
 
-export class FetchError extends Error {
+export class CodaError extends Error {
     constructor(
         message: string,
         public response: Response
@@ -11,7 +11,10 @@ export class FetchError extends Error {
 
 export const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-export const parseURL = (url: string, params: Record<string, string | number> = {}): string => {
+export const parseURL = (
+    url: string,
+    params: Record<string, string | number | boolean> = {}
+): string => {
     const newUrl = new URL(url);
     const searchParams = new URLSearchParams(newUrl.search);
     for (const [key, value] of Object.entries(params)) {
@@ -21,15 +24,14 @@ export const parseURL = (url: string, params: Record<string, string | number> = 
     return newUrl.toString();
 };
 
-export const parseJson = async <T>(fetchPromise: Promise<Response>): Promise<T> => {
-    const response = await fetchPromise;
-    if (!response.ok) {
-        throw new FetchError(`Failed to fetch: ${response.statusText}`, response);
+export const parseJson = <T>(response: Response): Promise<T> => {
+    if (!response.ok || response.status >= 400) {
+        throw new CodaError(`Failed to fetch: ${response.statusText}`, response);
     }
     try {
         return response.json();
     } catch (e) {
-        throw new FetchError(`Failed to parse JSON: ${e}`, response);
+        throw new CodaError(`Failed to parse JSON: ${e}`, response);
     }
 };
 

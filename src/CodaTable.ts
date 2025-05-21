@@ -1,4 +1,4 @@
-import { enforce, getRelation } from './utils';
+import { enforce, getRelation, getTableId } from './utils';
 
 import type { CodaMapper } from './CodaMapper';
 import type { CodaRelation } from './types';
@@ -149,6 +149,8 @@ export abstract class CodaTable {
         values: Partial<this> = {}
     ) {
         this._mapper = mapper;
+        this._mapper._getCache().set(`${getTableId(this)}:${values.id}`, this);
+
         this._state = { ...this._state, ...state };
         for (const key of Object.keys(values)) {
             this[key as keyof this] = values[key as keyof this] as this[keyof this];

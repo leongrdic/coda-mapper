@@ -224,6 +224,23 @@ describe('CodaMapper module', () => {
         const table2 = await table.pull();
         expect(table.name).toBe('new_new_name_value');
         expect(table2).toBe(table);
+
+        // this must work even if the table is not fetched from api
+        const table3 = new TestTable();
+        table3.name = 'name_value';
+        mockFetchResponse({
+            addedRowIds: ['id_value'],
+        } satisfies Partial<CodaInsertResponse>);
+        await mapper.insert(table3);
+        expect(table3.getValues()).toStrictEqual({
+            id: 'id_value',
+            name: 'name_value',
+        });
+        expect(table3._getState()).toStrictEqual({
+            existsOnCoda: true,
+            isFetched: false,
+        });
+        expect(mapper._getCache().get('table_id:id_value')).toBe(table3);
     });
 
     it('should fetch relation when relation is awaited', async () => {

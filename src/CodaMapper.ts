@@ -186,7 +186,6 @@ export class CodaMapper {
             return cachedRow as R;
         }
         row._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues);
-        this.cache.set(`${getTableId(table)}:${dtoRow.id}`, row);
         return row;
     }
     private decodeRichValue(
@@ -215,7 +214,6 @@ export class CodaMapper {
                     `@RelatedTable not set for row "${keyName}" on table ${className}.`
                 ))();
                 table._assign(this, { existsOnCoda: true }, { id: value.rowId });
-                this.cache.set(`${value.tableId}:${value.rowId}`, table);
                 return table;
             } else if (value['@type'] === 'MonetaryAmount') return value.amount;
             else if (value['@type'] === 'WebPage') return value.url;

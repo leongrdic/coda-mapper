@@ -1,7 +1,7 @@
 import { enforce, getRelation, getTableId } from './utils';
 
 import type { CodaMapper } from './CodaMapper';
-import type { CodaRelation } from './types';
+import type { CodaRelation, CodaRow } from './types';
 
 /**
  * Abstract base class representing a table in Coda.
@@ -22,13 +22,19 @@ import type { CodaRelation } from './types';
  */
 export abstract class CodaTable {
     abstract id: string;
-    public _original = {};
+    private _original = {};
     private _isDirty: boolean = false;
     private _mapper: CodaMapper;
     private _state = {
         existsOnCoda: false,
         isFetched: false,
     };
+    private _meta: {
+        browserLink?: string;
+        createdAt?: string;
+        updatedAt?: string;
+    };
+
     constructor() {
         enforce(
             new.target !== CodaTable,
@@ -138,6 +144,20 @@ export abstract class CodaTable {
     }
 
     /**
+     * Retrieves the metadata information of the row.
+     * - `browserLink`: The link to the row in Coda.
+     * - `createdAt`: The date when the row was created.
+     * - `updatedAt`: The date when the row was last updated.
+     *
+     * @example
+     * const createdAt = myTable.getMeta().createdAt;
+     * console.log(createdAt); // '2023-05-27T18:33:07.924Z'
+     */
+    public getMeta() {
+        return this._meta;
+    }
+
+    /**
      * Internal function. Assigns mapper, state, and initial values to the table.
      *
      * @example
@@ -146,7 +166,8 @@ export abstract class CodaTable {
     public _assign(
         mapper: CodaMapper,
         state: { existsOnCoda?: boolean; isFetched?: boolean },
-        values: Partial<this> = {}
+        values: Partial<this> = {},
+        dtoRow?: CodaRow
     ) {
         this._mapper = mapper;
         this._mapper._getCache().set(`${getTableId(this)}:${values.id}`, this);
@@ -156,6 +177,12 @@ export abstract class CodaTable {
             this[key as keyof this] = values[key as keyof this] as this[keyof this];
         }
         this._resetDirty();
+
+        this._meta = {
+            browserLink: dtoRow?.browserLink,
+            createdAt: dtoRow?.createdAt,
+            updatedAt: dtoRow?.updatedAt,
+        };
     }
 
     /**

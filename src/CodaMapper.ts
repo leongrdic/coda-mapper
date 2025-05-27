@@ -82,6 +82,7 @@ export class CodaMapper {
     private async fetch<R>(url: string, options: RequestInit = {}) {
         const headers = new Headers({
             ...options.headers,
+            Accept: 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
         });
         if (this.debugHttpRequests) {
@@ -95,17 +96,16 @@ export class CodaMapper {
         }
         const response = await fetch(url, { ...options, headers });
         if (this.debugHttpRequests) {
-            const responseClone = response.clone();
             let body;
             try {
-                body = await responseClone.json();
+                body = await response.clone().json();
             } catch {
-                body = await responseClone.text();
+                body = await response.clone().text();
             }
             console[response.ok ? 'debug' : 'error']({
                 message: `[CodaMapper] Response from ${url}`,
-                url: responseClone.url,
-                status: responseClone.status,
+                url: response.url,
+                status: response.status,
                 body,
             });
         }
@@ -182,10 +182,10 @@ export class CodaMapper {
         parsedValues.id = dtoRow.id;
         const cachedRow = this.cache.get(`${getTableId(table)}:${dtoRow.id}`);
         if (cachedRow) {
-            cachedRow._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues);
+            cachedRow._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues, dtoRow);
             return cachedRow as R;
         }
-        row._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues);
+        row._assign(this, { existsOnCoda: true, isFetched: true }, parsedValues, dtoRow);
         return row;
     }
     private decodeRichValue(
@@ -291,15 +291,27 @@ export class CodaMapper {
      * await mapper.waitForMutation(mapper.insert(rows));
      */
     public async waitForMutation<
-        PR extends Promise<
-            CodaInsertResponse | CodaUpsertResponse | CodaUpdateResponse | CodaDeleteResponse
-        >,
-    >(codaRequest: PR, delayTime: number = 5000) {
+        R extends CodaInsertResponse | CodaUpsertResponse | CodaUpdateResponse | CodaDeleteResponse,
+    >(codaRequest: R | Promise<R>, delayTime: number = 5000) {
         const response = await codaRequest;
         let completed = false;
+        let failCounter = 0;
         while (!completed) {
             await delay(delayTime);
-            completed = (await this.getMutationStatus(response.requestId)).completed;
+            try {
+                completed = (await this.getMutationStatus(response.requestId)).completed; // can be fetch error 404
+            } catch (e) {
+                if (e instanceof CodaError && e.response.status === 404) {
+                    failCounter++;
+                    if (failCounter >= 5) {
+                        throw new Error(
+                            `Failed to get mutation status for requestId ${response.requestId} after 5 attempts.`
+                        );
+                    }
+                    continue;
+                }
+                throw e;
+            }
         }
         return response;
     }
@@ -414,6 +426,47 @@ export class CodaMapper {
             items.push(...response.items.map((row) => this.parseDtoRow(table, row)));
         } while (response && 'nextPageToken' in response && response.nextPageToken);
         return items;
+    }
+
+    /**
+     * Fetches a single row from a table that matches a search criteria.
+     *
+     * Be careful when using the `latest` option. If the API's view of the doc is not up to date, the API will return an HTTP 400 response.
+     *
+     * @example
+     * const row = await mapper.first(MyTable, 'name', 'John');
+     * console.log(row); // a row that has a 'name' column with the value 'John'
+     */
+    public async first<R extends CodaTable>(
+        table: new () => R,
+        property: Exclude<
+            {
+                [K in keyof R]: R[K] extends Function ? never : K;
+            }[keyof R],
+            `_${string}` | 'id'
+        >,
+        value: string,
+        options?: {
+            latest?: boolean;
+            params?: Pick<CodaGetRowsQuery, 'sortBy' | 'syncToken' | 'visibleOnly'>;
+        }
+    ): Promise<R | null> {
+        const tableId = enforce(getTableId(table), `@TableId not set for class ${table.name}`);
+        const columnId = enforce(
+            getColumnId(table, String(property)),
+            `@ColumnId not set for property ${String(property)} in class ${table.name}`
+        );
+        const url = `${this.baseUrl}/docs/${this.docId}/tables/${tableId}/rows`;
+        const response = await this.api.get<CodaRowsResponse, CodaGetRowsQuery>(
+            url,
+            {
+                ...options?.params,
+                query: `"${columnId}":${JSON.stringify(value)}`,
+                limit: 1,
+            },
+            options?.latest ? { headers: { 'X-Coda-Doc-Version': 'latest' } } : undefined
+        );
+        return response.items.map((row) => this.parseDtoRow(table, row))[0] ?? null;
     }
 
     /**

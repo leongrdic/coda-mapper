@@ -61,6 +61,9 @@ describe('CodaMapper module', () => {
         }
         mockFetchResponse({
             id: 'id_value',
+            createdAt: 'then',
+            updatedAt: 'now',
+            browserLink: 'some_link',
             values: {
                 column_name: 'name_value',
             },
@@ -74,6 +77,11 @@ describe('CodaMapper module', () => {
         expect(table.getValues()).toStrictEqual({
             id: 'id_value',
             name: 'name_value',
+        });
+        expect(table.getMeta()).toStrictEqual({
+            browserLink: 'some_link',
+            createdAt: 'then',
+            updatedAt: 'now',
         });
 
         const table2 = await mapper.get(TestTable, 'id_value');
@@ -131,6 +139,7 @@ describe('CodaMapper module', () => {
                 method: 'GET',
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'X-Coda-Doc-Version': 'latest',
                 }),
             }
@@ -158,6 +167,35 @@ describe('CodaMapper module', () => {
                 method: 'GET',
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
+                    'X-Coda-Doc-Version': 'latest',
+                }),
+            }
+        );
+        const paramsFirst = {
+            sortBy: 'createdAt',
+            syncToken: '123',
+            visibleOnly: true,
+        } as const;
+        await mapper.first(TestTable, 'name', 'name_value', {
+            params: paramsFirst,
+            latest: true,
+        });
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            3,
+            parseURL('https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows', {
+                ...paramsFind,
+                query: `"column_name":${JSON.stringify('name_value')}`,
+                limit: 1,
+                useColumnNames: false,
+                valueFormat: 'rich',
+            }),
+            {
+                method: 'GET',
+                headers: new Headers({
+                    Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'X-Coda-Doc-Version': 'latest',
                 }),
             }
@@ -171,9 +209,9 @@ describe('CodaMapper module', () => {
             params: paramsAll,
             latest: true,
         });
-        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect(global.fetch).toHaveBeenCalledTimes(4);
         expect(global.fetch).toHaveBeenNthCalledWith(
-            3,
+            4,
             parseURL('https://coda.io/apis/v1/docs/doc_id/tables/table_id/rows', {
                 ...paramsAll,
                 limit: 500,
@@ -184,6 +222,7 @@ describe('CodaMapper module', () => {
                 method: 'GET',
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'X-Coda-Doc-Version': 'latest',
                 }),
             }
@@ -508,6 +547,7 @@ describe('CodaMapper module', () => {
                 } satisfies CodaPostRowsRequest),
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                 }),
             }
@@ -569,6 +609,7 @@ describe('CodaMapper module', () => {
                 } satisfies CodaPutRowRequest),
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                 }),
             }
@@ -666,6 +707,7 @@ describe('CodaMapper module', () => {
                 } satisfies CodaPostRowsRequest),
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                 }),
             }
@@ -712,6 +754,7 @@ describe('CodaMapper module', () => {
                 } satisfies CodaDeleteRowsRequest),
                 headers: new Headers({
                     Authorization: 'Bearer api_key',
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                 }),
             }

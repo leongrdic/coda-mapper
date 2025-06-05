@@ -168,7 +168,7 @@ export class CodaMapper {
             );
             const relation = getRelation(table, prop);
             const multiple = getMultiple(table, prop);
-            const parsedValue = !dtoRow.values[columnId]
+            const parsedValue = dtoRow.values[columnId] === undefined
                 ? undefined
                 : this.decodeRichValue(
                       dtoRow.values[columnId],

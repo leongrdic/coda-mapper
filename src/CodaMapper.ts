@@ -168,15 +168,16 @@ export class CodaMapper {
             );
             const relation = getRelation(table, prop);
             const multiple = getMultiple(table, prop);
-            const parsedValue = dtoRow.values[columnId] === undefined
-                ? undefined
-                : this.decodeRichValue(
-                      dtoRow.values[columnId],
-                      relation,
-                      multiple,
-                      table.name,
-                      prop
-                  );
+            const parsedValue =
+                dtoRow.values[columnId] === undefined
+                    ? undefined
+                    : this.decodeRichValue(
+                          dtoRow.values[columnId],
+                          relation,
+                          multiple,
+                          table.name,
+                          prop
+                      );
             parsedValues[prop as keyof R] = parsedValue as R[keyof R];
         }
         parsedValues.id = dtoRow.id;
@@ -194,10 +195,10 @@ export class CodaMapper {
         multiple?: boolean,
         className?: string,
         keyName?: string
-    ): RecursiveHelper<string | number | boolean | CodaTable | null> {
+    ): RecursiveHelper<string | number | boolean | CodaTable | undefined> {
         if (typeof value === 'string') {
             if (multiple && value === '') return [];
-            if (relation && value === '') return null;
+            if (relation && value === '') return undefined;
             if (value.startsWith('```') && value.endsWith('```')) {
                 value = value.substring(3, value.length - 3);
             }

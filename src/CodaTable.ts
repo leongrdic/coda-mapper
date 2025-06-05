@@ -56,6 +56,9 @@ export abstract class CodaTable {
                 }
                 if (!Array.isArray(target[String(prop) as keyof this])) {
                     const item = target[String(prop) as keyof this] as CodaTable;
+                    if (!(item instanceof relation)) {
+                        console.log('its not');
+                    }
                     enforce(
                         item instanceof relation,
                         `Expected ${relation.name} but got ${item.constructor.name}`

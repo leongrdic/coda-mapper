@@ -94,6 +94,45 @@ describe('CodaMapper module', () => {
         expect(table.name).toBe('new_name');
         expect(table2.name).toBe('new_name');
     });
+    it('should correctly parse all string responses', async () => {
+        @TableId('table_id')
+        class TestTable extends CodaTable {
+            id: string;
+            @ColumnId('empty_string') emptyString: string;
+            @ColumnId('empty_string_array') @Multiple emptyArray: string[];
+            @ColumnId('empty_relation')
+            @References(() => TestTable)
+            emptyRelation: CodaRelation<TestTable>;
+            @ColumnId('empty_relation_array')
+            @References(() => TestTable)
+            @Multiple
+            emptyRelationArray: CodaRelation<TestTable[]>;
+        }
+        mockFetchResponse({
+            id: 'id_value',
+            values: {
+                empty_string: '',
+                empty_string_array: '',
+                empty_relation: '',
+                empty_relation_array: '',
+            },
+        } satisfies Partial<CodaRowResponse>);
+        const table = await mapper.get(TestTable, 'id_value');
+        if (!table) {
+            throw new Error('Table is undefined');
+        }
+        expect(table.emptyString).toStrictEqual('');
+        expect(table.emptyArray).toStrictEqual([]);
+        expect(table.emptyRelation).toStrictEqual(undefined);
+        expect(table.emptyRelationArray).toStrictEqual([]);
+        expect(table.getValues()).toStrictEqual({
+            id: 'id_value',
+            emptyString: '',
+            emptyArray: [],
+            emptyRelation: undefined,
+            emptyRelationArray: [],
+        });
+    });
     it('should fetch the row with the correct options', async () => {
         @TableId('table_id')
         class TestTable extends CodaTable {

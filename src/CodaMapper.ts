@@ -194,9 +194,10 @@ export class CodaMapper {
         multiple?: boolean,
         className?: string,
         keyName?: string
-    ): RecursiveHelper<string | number | boolean | CodaTable> {
+    ): RecursiveHelper<string | number | boolean | CodaTable | null> {
         if (typeof value === 'string') {
             if (multiple && value === '') return [];
+            if (relation && value === '') return null;
             if (value.startsWith('```') && value.endsWith('```')) {
                 value = value.substring(3, value.length - 3);
             }

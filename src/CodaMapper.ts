@@ -42,6 +42,9 @@ import type {
 export class CodaMapper {
     private readonly baseUrl: string = 'https://coda.io/apis/v1';
     private readonly debugHttpRequests: boolean = false;
+    private readonly delayTime: number = 5000;
+    private readonly ignoreAllMutationErrors: boolean = false;
+    private readonly maxMutationAttempts: number = 5;
 
     constructor(
         private readonly docId: string,
@@ -49,6 +52,9 @@ export class CodaMapper {
         options?: {
             baseUrl?: string;
             debugHttpRequests?: boolean;
+            delayTime?: number;
+            ignoreAllMutationErrors?: boolean;
+            maxMutationAttempts?: number;
         }
     ) {
         enforce(docId, 'docId is required');
@@ -59,6 +65,15 @@ export class CodaMapper {
                 '[CodaMapper] Debugging HTTP requests is enabled. This will log all requests and responses to the console. To disable it, set "debugHttpRequests" to false.'
             );
             this.debugHttpRequests = options.debugHttpRequests;
+        }
+        if (options?.delayTime) {
+            this.delayTime = options.delayTime;
+        }
+        if (options?.ignoreAllMutationErrors) {
+            this.ignoreAllMutationErrors = options.ignoreAllMutationErrors;
+        }
+        if (options?.maxMutationAttempts) {
+            this.maxMutationAttempts = options.maxMutationAttempts;
         }
     }
 
@@ -294,18 +309,18 @@ export class CodaMapper {
      */
     public async waitForMutation<
         R extends CodaInsertResponse | CodaUpsertResponse | CodaUpdateResponse | CodaDeleteResponse,
-    >(codaRequest: R | Promise<R>, delayTime: number = 5000) {
+    >(codaRequest: R | Promise<R>) {
         const response = await codaRequest;
         let completed = false;
         let failCounter = 0;
         while (!completed) {
-            await delay(delayTime);
+            await delay(this.delayTime);
             try {
                 completed = (await this.getMutationStatus(response.requestId)).completed; // can be fetch error 404
             } catch (e) {
-                if (e instanceof CodaError && e.response.status === 404) {
+                if (this.ignoreAllMutationErrors || (e instanceof CodaError && e.response.status === 404)) {
                     failCounter++;
-                    if (failCounter >= 5) {
+                    if (failCounter >= this.maxMutationAttempts) {
                         throw new Error(
                             `Failed to get mutation status for requestId ${response.requestId} after 5 attempts.`
                         );
